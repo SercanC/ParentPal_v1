@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.api.v1.api import api_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -24,6 +25,5 @@ async def health_check():
         "version": "1.0.0"
     }
 
-# Import and include routers here
-# from app.api.v1.api import api_router
-# app.include_router(api_router, prefix=settings.API_V1_STR)
+# Include API router
+app.include_router(api_router, prefix=settings.API_V1_STR)
