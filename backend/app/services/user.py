@@ -2,10 +2,9 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from passlib.context import CryptContext
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
 from .base import BaseService
 
 class UserService(BaseService[User, UserCreate, UserUpdate]):
@@ -37,17 +36,9 @@ class UserService(BaseService[User, UserCreate, UserUpdate]):
         user = await self.get_by_email(email=email)
         if not user:
             return None
-        if not self.verify_password(password, user.hashed_password):
+        if not verify_password(password, user.hashed_password):
             return None
         return user
-
-    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify password"""
-        return pwd_context.verify(plain_password, hashed_password)
-
-    def get_password_hash(self, password: str) -> str:
-        """Hash a password"""
-        return pwd_context.hash(password)
 
     async def update_last_sync(self, *, user_id: str, last_sync: datetime) -> User:
         """Update user's last sync timestamp"""
