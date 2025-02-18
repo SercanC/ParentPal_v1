@@ -1,17 +1,61 @@
 from datetime import timedelta
 from typing import Annotated
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from jose import jwt, JWTError
 from app.core.security import (
     create_access_token,
     create_refresh_token,
-    verify_password
+    verify_password,
+    get_password_hash
 )
+from app.core.config import settings
 from app.schemas.auth import Token, Login, RefreshToken
+from app.schemas.user import UserCreate, User, UserWithToken
 from app.api.deps import get_services
 from app.services.factory import ServiceFactory
 
 router = APIRouter()
+
+@router.post("/register", response_model=UserWithToken)
+async def register(
+    user_in: UserCreate,
+    services: Annotated[ServiceFactory, Depends(get_services)]
+) -> UserWithToken:
+    """Register a new user"""
+    # Check if passwords match
+    if user_in.password != user_in.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match"
+        )
+    
+    # Check if user with this email already exists
+    existing_user = await services.user.get_by_email(email=user_in.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered"
+        )
+    
+    # Create user with a unique ID (UUID)
+    user_data = user_in.model_dump(exclude={"confirm_password"})
+    user_id = str(uuid.uuid4())
+    user = await services.user.create(
+        obj_in=UserCreate(**user_data),
+        user_id=user_id
+    )
+    
+    # Generate tokens
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+    
+    return UserWithToken(
+        **user.model_dump(),
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
 
 @router.post("/login", response_model=Token)
 async def login(
