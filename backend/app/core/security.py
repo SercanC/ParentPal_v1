@@ -23,11 +23,18 @@ def create_access_token(subject: str | Any, expires_delta: timedelta | None = No
     return encoded_jwt
 
 def create_refresh_token(subject: str | Any) -> str:
-    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    return create_access_token(subject=subject, expires_delta=expire)
+    """Create a refresh token with longer expiration"""
+    expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    return create_access_token(subject=subject, expires_delta=expires_delta)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against a hash"""
+    if not plain_password:
+        return False
+    if not hashed_password:
+        return False
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
+    """Generate a password hash"""
     return pwd_context.hash(password)

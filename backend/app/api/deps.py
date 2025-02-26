@@ -1,6 +1,6 @@
 from typing import Generator, Annotated
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Header
+from fastapi.security import OAuth2PasswordBearer, HTTPBearer
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
@@ -8,14 +8,15 @@ from app.db.session import get_db
 from app.services.factory import ServiceFactory
 from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+# Use HTTPBearer for swagger UI authorization
+security = HTTPBearer()
 
 async def get_services(db: Annotated[AsyncSession, Depends(get_db)]) -> ServiceFactory:
     """Dependency for getting service factory"""
     return ServiceFactory(db)
 
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str, Depends(security)],
     services: Annotated[ServiceFactory, Depends(get_services)]
 ) -> User:
     """Dependency for getting current authenticated user"""
@@ -24,9 +25,13 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
+        # Extract token from security dependency
+        token_str = token.credentials
+        
         payload = jwt.decode(
-            token,
+            token_str,
             settings.SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM]
         )
@@ -34,6 +39,8 @@ async def get_current_user(
         if user_id is None:
             raise credentials_exception
     except JWTError:
+        raise credentials_exception
+    except Exception:
         raise credentials_exception
 
     user = await services.user.get(user_id)

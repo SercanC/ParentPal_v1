@@ -12,9 +12,10 @@ from app.core.security import (
 )
 from app.core.config import settings
 from app.schemas.auth import Token, Login, RefreshToken
-from app.schemas.user import UserCreate, User, UserWithToken
+from app.schemas.user import UserCreate, User, UserWithToken, UserInDB
 from app.api.deps import get_services
 from app.services.factory import ServiceFactory
+from fastapi.encoders import jsonable_encoder
 
 router = APIRouter()
 
@@ -39,20 +40,28 @@ async def register(
             detail="Email already registered"
         )
     
-    # Create user with a unique ID (UUID)
-    user_data = user_in.model_dump(exclude={"confirm_password"})
+    # Generate UUID and create base user data
     user_id = str(uuid.uuid4())
-    user = await services.user.create(
-        obj_in=UserCreate(**user_data),
-        user_id=user_id
-    )
+    user_data = {
+        "id": user_id,
+        "email": user_in.email,
+        "full_name": user_in.full_name,
+        "is_active": True,
+        "preferences": user_in.preferences or {},
+        "hashed_password": get_password_hash(user_in.password)
+    }
+    
+    # Create user
+    user = await services.user.create(user_data)
     
     # Generate tokens
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
     
+    # Convert SQLAlchemy model to dictionary and add tokens
+    user_data = jsonable_encoder(user)
     return UserWithToken(
-        **user.model_dump(),
+        **user_data,
         access_token=access_token,
         refresh_token=refresh_token
     )
@@ -80,7 +89,8 @@ async def login(
     
     return Token(
         access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id)
+        refresh_token=create_refresh_token(user.id),
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
     )
 
 @router.post("/login/access-token", response_model=Token)
@@ -104,7 +114,8 @@ async def login_access_token(
     
     return Token(
         access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id)
+        refresh_token=create_refresh_token(user.id),
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
     )
 
 @router.post("/refresh-token", response_model=Token)
@@ -140,5 +151,6 @@ async def refresh_access_token(
     
     return Token(
         access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id)
+        refresh_token=create_refresh_token(user.id),
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
     )
